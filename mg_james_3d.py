@@ -16,10 +16,14 @@ import pylab
 
 G = 1.0
 
+#nx = 4
+#nx = 8
+#nx = 32
 nx = 64
-ny = 64
-nz = 64
-
+#nx = 128
+#nx = 256
+ny = nx
+nz = nx
 
 #-----------------------------------------------------------------------------
 # define the point masses -- we specify the x,y,z and mass
@@ -33,22 +37,27 @@ class mass:
 
 masses = []
 #masses.append(mass(0.25,0.5,0.25,1.0))
-masses.append(mass(0.5 ,0.5 ,0.5 ,2.0))
+#masses.append(mass(0.5 ,0.5 ,0.5 ,2.0))
 #masses.append(mass(0.75,0.75,0.75,1.0))
-
+masses.append(mass(0.25,0.25,0.25,1.0))
+masses.append(mass(0.25,0.25,0.75,1.0))
+masses.append(mass(0.25,0.75,0.25,1.0))
+masses.append(mass(0.25,0.75,0.75,1.0))
+masses.append(mass(0.75,0.25,0.25,1.0))
+masses.append(mass(0.75,0.25,0.75,1.0))
+masses.append(mass(0.75,0.75,0.25,1.0))
+masses.append(mass(0.75,0.75,0.75,1.0))
 
 #-----------------------------------------------------------------------------
 # the analytic solution
 def true(masses,x,y,z):
 
-    phi = None
+    phi = 0.0
 
     for m in masses:
         r = numpy.sqrt((x - m.x)**2 + (y - m.y)**2 + (z - m.z)**2)
-        if phi == None:
-            phi = -G*m.m/r
-        else:
-            phi += -G*m.m/r
+
+        phi += green(r) * m.m
 
     return phi
         
@@ -56,19 +65,30 @@ def true(masses,x,y,z):
 #-----------------------------------------------------------------------------
 # the righthand side
 def f(masses, grid):
-    # find the zone that contains each mass and then compute the density accordingly
+    # Find the zone that contains each mass and then compute the density accordingly
 
     f = grid.scratchArray()
 
+    xc = (grid.xmax - grid.xmin) / 2.0
+    yc = (grid.ymax - grid.ymin) / 2.0
+    zc = (grid.zmax - grid.zmin) / 2.0
+
     for m in masses:
         ii = numpy.nonzero(numpy.logical_and(grid.xl <= m.x, grid.xr > m.x))[0][0]
+        if (m.x <= xc): ii -= 1
         jj = numpy.nonzero(numpy.logical_and(grid.yl <= m.y, grid.yr > m.y))[0][0]
+        if (m.y <= yc): jj -= 1
         kk = numpy.nonzero(numpy.logical_and(grid.zl <= m.z, grid.zr > m.z))[0][0]
+        if (m.z <= zc): kk -= 1
 
-        f[ii,jj,kk] += m.m
+        f[ii,jj,kk] += 4.0 * math.pi * G * (m.m / (grid.dx*grid.dy*grid.dz))
 
-    f /= (grid.dx*grid.dy*grid.dz)
-    f = 4.0*math.pi*f
+        # Update the locations on the grid for the masses, since it won't be exactly
+        # where we requested, due to discretization.
+   
+        m.x = grid.x[ii]
+        m.y = grid.y[jj]
+        m.z = grid.z[kk]
 
     return f
 
@@ -80,10 +100,53 @@ def error(myg, r):
     # L2 norm of elements in r, multiplied by dx to
     # normalize
     return numpy.sqrt(myg.dx*myg.dy*myg.dz*numpy.sum((r[myg.ilo:myg.ihi+1,myg.jlo:myg.jhi+1,myg.klo:myg.khi+1]**2).flat))
-
-
                 
 
+#-----------------------------------------------------------------------------
+# the Green's function
+def green(r):
+
+    gf = numpy.zeros(r.shape)
+
+    if (numpy.size(r) == 1):
+        if (r != 0.0):
+            gf = -G / r
+
+    else:
+
+        gf[numpy.where(r != 0.0)] = -G / r[numpy.where(r != 0.0)]
+
+    return gf
+
+#-----------------------------------------------------------------------------
+# convolve the Green's functions with the masses
+def convolve(mass_list, r_list):
+
+    phi = 0.0
+
+    for i in range(0,6):
+ 
+        phi += numpy.sum(green(r_list[i]) * mass_list[i]) 
+
+    return phi
+
+#-----------------------------------------------------------------------------
+# Create the distance functions that we're going to use for convolving over
+def create_r(x,y,z,a):
+
+        # we are at a fixed x
+        r_xl = numpy.sqrt( (a.xmin - x)**2           + (a.y3d[a.ilo,:,:] - y)**2 + (a.z3d[a.ilo,:,:] - z)**2 )
+        r_xr = numpy.sqrt( (a.xmax - x)**2           + (a.y3d[a.ihi,:,:] - y)**2 + (a.z3d[a.ihi,:,:] - z)**2 )
+
+        # we are at a fixed y
+        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - x)**2 + (a.ymin - y)**2           + (a.z3d[:,a.jlo,:] - z)**2 )
+        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - x)**2 + (a.ymax - y)**2           + (a.z3d[:,a.jhi,:] - z)**2 )
+
+        # we are at a fixed z
+        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - x)**2 + (a.y3d[:,:,a.klo] - y)**2 + (a.zmin - z)**2           )
+        r_zr = numpy.sqrt( (a.x3d[:,:,a.khi] - x)**2 + (a.y3d[:,:,a.khi] - y)**2 + (a.zmax - z)**2           )
+
+        return (r_xl, r_xr, r_yl, r_yr, r_zl, r_zr)
 
 #-----------------------------------------------------------------------------
 # the main solve -- James algorithm
@@ -96,13 +159,14 @@ a = multigrid.ccMG3d(nx, ny, nz,
                      xlBCtype="dirichlet", xrBCtype="dirichlet",
                      ylBCtype="dirichlet", yrBCtype="dirichlet",
                      zlBCtype="dirichlet", zrBCtype="dirichlet",
-                     verbose=1)
+                     verbose=0)
 
 # initialize the solution to 0
 a.initZeros()
 
 # initialize the RHS using the function f
-a.initRHS(f(masses, a.solnGrid))
+rhs = f(masses, a.solnGrid)
+a.initRHS(rhs)
 
 # solve to a relative tolerance of 1.e-11
 a.solve(rtol=1.e-11)
@@ -111,286 +175,241 @@ a.solve(rtol=1.e-11)
 phi_h = a.getSolution()
 
 
-# 2. compute sigma -- the surface charge
+# 2. compute surface masses
+
+const = 1.0 / (4.0 * math.pi * G)
 
 # sigma = grad phi_h . n / (4pi G)
-sigma_xl = ( (phi_h[a.ilo,:,:] - 0.0)/a.dx) / (4.0*math.pi*G)
-sigma_xr = ( (0.0 - phi_h[a.ihi,:,:])/a.dx) / (4.0*math.pi*G)
+# mass  = sigma . dA
 
-sigma_yl = ( (phi_h[:,a.jlo,:] - 0.0)/a.dy) / (4.0*math.pi*G)
-sigma_yr = ( (0.0 - phi_h[:,a.jhi,:])/a.dy) / (4.0*math.pi*G)
+# Make sure that we only sum over masses adjacent to the domain faces. Edges and corners don't count, so we leave those entries zeroed out.
 
-sigma_zl = ( (phi_h[:,:,a.klo] - 0.0)/a.dz) / (4.0*math.pi*G)
-sigma_zr = ( (0.0 - phi_h[:,:,a.khi])/a.dz) / (4.0*math.pi*G)
+dA = a.dy * a.dz
 
+mass_xl = numpy.zeros(phi_h[a.ilo,:,:].shape)
+mass_xr = numpy.zeros(phi_h[a.ihi,:,:].shape)
 
-# 3. compute the boundary conditions on "opposite-charge" potential, Phi
+mass_xl[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo,a.jlo:a.jhi+1,a.klo:a.khi+1] - phi_h[a.ilo+1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx ) * const * dA
+mass_xr[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ihi,a.jlo:a.jhi+1,a.klo:a.khi+1] - phi_h[a.ihi-1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx ) * const * dA
 
-A = 4.0*math.pi*G
-A = 1.0
+dA = a.dx * a.dz
+
+mass_yl = numpy.zeros(phi_h[:,a.jlo,:].shape)
+mass_yr = numpy.zeros(phi_h[:,a.jhi,:].shape)
+
+mass_yl[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo,a.klo:a.khi+1] - phi_h[a.ilo:a.ihi+1,a.jlo+1,a.klo:a.khi+1]) / a.dy ) * const * dA
+mass_yr[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jhi,a.klo:a.khi+1] - phi_h[a.ilo:a.ihi+1,a.jhi-1,a.klo:a.khi+1]) / a.dy ) * const * dA
+
+dA = a.dx * a.dy
+
+mass_zl = numpy.zeros(phi_h[:,:,a.klo].shape)
+mass_zr = numpy.zeros(phi_h[:,:,a.khi].shape)
+
+mass_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo] - phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo+1]) / a.dz ) * const * dA
+mass_zr[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi] - phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi-1]) / a.dz ) * const * dA
+
+mass_list = (mass_xl, mass_xr, mass_yl, mass_yr, mass_zl, mass_zr)
+
+totalMass = numpy.sum(mass_list)
+actualMass = 0.0
+for m in masses:
+    actualMass += m.m
+
+print "Total surface mass = ", totalMass
+print "Total mass in the domain =", actualMass
+print "Relative error in mass = ", abs(totalMass - actualMass) / actualMass
+
+# 3. compute the boundary conditions on phi
 
 # -x face
-Phi_xl = numpy.zeros(sigma_xl.shape)
+Phi_xl = numpy.zeros(mass_xl.shape)
+true_xl = numpy.zeros(mass_xl.shape)
 
 for kk in range(a.klo, a.khi+1):
     for jj in range(a.jlo, a.jhi+1):
 
         # we are in the x = xmin plane
 
-        # sigma coords - Phi coords
+        x = a.xmin
+        y = a.y[jj]
+        z = a.z[kk]
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt(                        (a.y3d[a.ilo,:,:] - a.y[jj])**2 + (a.z3d[a.ilo,:,:] - a.z[kk])**2 )
-        r_xr = numpy.sqrt( (a.xmax - a.xmin)**2 + (a.y3d[a.ihi,:,:] - a.y[jj])**2 + (a.z3d[a.ihi,:,:] - a.z[kk])**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_xl[jj,kk] += -numpy.sum(numpy.where( r_xl == 0.0, 0.0, sigma_xl/(A*r_xl) ))
-        Phi_xl[jj,kk] += -numpy.sum(sigma_xr/(A*r_xr))
-
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.xmin)**2 + (a.ymin - a.y[jj])**2 + (a.z3d[:,a.jlo,:] - a.z[kk])**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.xmin)**2 + (a.ymax - a.y[jj])**2 + (a.z3d[:,a.jhi,:] - a.z[kk])**2 )
-
-        Phi_xl[jj,kk] += -numpy.sum(sigma_yl/(A*r_yl))
-        Phi_xl[jj,kk] += -numpy.sum(sigma_yr/(A*r_yr))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.xmin)**2 + (a.y3d[:,:,a.klo] - a.y[jj])**2 + (a.zmin - a.z[kk])**2 )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.khi] - a.xmin)**2 + (a.y3d[:,:,a.khi] - a.y[jj])**2 + (a.zmin - a.z[kk])**2 )
-
-        Phi_xl[jj,kk] += -numpy.sum(sigma_zl/(A*r_zl))
-        Phi_xl[jj,kk] += -numpy.sum(sigma_zr/(A*r_zr))
-
-Phi_xl *= a.dy*a.dz
+        Phi_xl[jj,kk] = convolve(mass_list, r_list)
+        true_xl[jj,kk] = true(masses,x,y,z)
 
 print numpy.min(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 # +x face
-Phi_xr = numpy.zeros(sigma_xr.shape)
+Phi_xr = numpy.zeros(mass_xr.shape)
+true_xr = numpy.zeros(mass_xr.shape)
 
 for kk in range(a.klo, a.khi+1):
     for jj in range(a.jlo, a.jhi+1):
 
         # we are in the x = xmax plane
 
-        # sigma coords - Phi coords
+        x = a.xmax
+        y = a.y[jj]
+        z = a.z[kk]
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt( (a.xmin - a.xmax)**2 + (a.y3d[a.ilo,:,:] - a.y[jj])**2 + (a.z3d[a.ilo,:,:] - a.z[kk])**2 )
-        r_xr = numpy.sqrt(                        (a.y3d[a.ihi,:,:] - a.y[jj])**2 + (a.z3d[a.ihi,:,:] - a.z[kk])**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_xr[jj,kk] += -numpy.sum(sigma_xl/(A*r_xl))
-        Phi_xr[jj,kk] += -numpy.sum(numpy.where( r_xr == 0.0, 0.0, sigma_xr/(A*r_xr) ))
-
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.xmax)**2 + (a.ymin - a.y[jj])**2 + (a.z3d[:,a.jlo,:] - a.z[kk])**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.xmax)**2 + (a.ymax - a.y[jj])**2 + (a.z3d[:,a.jhi,:] - a.z[kk])**2 )
-
-        Phi_xr[jj,kk] += -numpy.sum(sigma_yl/(A*r_yl))
-        Phi_xr[jj,kk] += -numpy.sum(sigma_yr/(A*r_yr))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.xmax)**2 + (a.y3d[:,:,a.klo] - a.y[jj])**2 + (a.zmin - a.z[kk])**2 )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.khi] - a.xmax)**2 + (a.y3d[:,:,a.khi] - a.y[jj])**2 + (a.zmin - a.z[kk])**2 )
-
-        Phi_xr[jj,kk] += -numpy.sum(sigma_zl/(A*r_zl))
-        Phi_xr[jj,kk] += -numpy.sum(sigma_zr/(A*r_zr))
-
-Phi_xr *= a.dy*a.dz
+        Phi_xr[jj,kk] = convolve(mass_list, r_list)
+        true_xr[jj,kk] = true(masses,x,y,z)
 
 print numpy.min(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 # -y face
-Phi_yl = numpy.zeros(sigma_yl.shape)
+Phi_yl = numpy.zeros(mass_yl.shape)
+true_yl = numpy.zeros(mass_yl.shape)
 
 for kk in range(a.klo, a.khi+1):
     for ii in range(a.ilo, a.ihi+1):
 
         # we are in the y = ymin plane
 
-        # sigma coords - Phi coords
+        x = a.x[ii]
+        y = a.ymin
+        z = a.z[kk]
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt( (a.xmin - a.x[ii])**2 + (a.y3d[a.ilo,:,:] - a.ymin)**2 + (a.z3d[a.ilo,:,:] - a.z[kk])**2 )
-        r_xr = numpy.sqrt( (a.xmax - a.x[ii])**2 + (a.y3d[a.ihi,:,:] - a.ymin)**2 + (a.z3d[a.ihi,:,:] - a.z[kk])**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_yl[ii,kk] += -numpy.sum(sigma_xl/(A*r_xl))
-        Phi_yl[ii,kk] += -numpy.sum(sigma_xr/(A*r_xr))
+        Phi_yl[ii,kk] = convolve(mass_list, r_list)
+        true_yl[ii,kk] = true(masses,x,y,z)
 
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.x[ii])**2 +                        (a.z3d[:,a.jlo,:] - a.z[kk])**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.x[ii])**2 + (a.ymax - a.ymin)**2 + (a.z3d[:,a.jhi,:] - a.z[kk])**2 )
-
-        Phi_yl[ii,kk] += -numpy.sum(numpy.where( r_yl == 0.0, 0.0, sigma_yl/(A*r_yl) ))
-        Phi_yl[ii,kk] += -numpy.sum(sigma_yr/(A*r_yr))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.klo] - a.ymin)**2 + (a.zmin - a.z[kk])**2 )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.khi] - a.ymin)**2 + (a.zmax - a.z[kk])**2 )
-
-        Phi_yl[ii,kk] += -numpy.sum(sigma_zl/(A*r_zl))
-        Phi_yl[ii,kk] += -numpy.sum(sigma_zr/(A*r_zr))
-
-Phi_yl *= a.dx*a.dy
-
-print numpy.min(Phi_yl[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_yl[a.jlo:a.jhi+1,a.klo:a.khi+1])
+print numpy.min(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1]), numpy.max(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1])
 
 # +y face
-Phi_yr = numpy.zeros(sigma_yr.shape)
+Phi_yr = numpy.zeros(mass_yr.shape)
+true_yr = numpy.zeros(mass_yr.shape)
 
 for kk in range(a.klo, a.khi+1):
     for ii in range(a.ilo, a.ihi+1):
 
         # we are in the y = ymax plane
 
-        # sigma coords - Phi coords
+        x = a.x[ii]
+        y = a.ymax
+        z = a.z[kk]
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt( (a.xmin - a.x[ii])**2 + (a.y3d[a.ilo,:,:] - a.ymax)**2 + (a.z3d[a.ilo,:,:] - a.z[kk])**2 )
-        r_xr = numpy.sqrt( (a.xmax - a.x[ii])**2 + (a.y3d[a.ihi,:,:] - a.ymax)**2 + (a.z3d[a.ihi,:,:] - a.z[kk])**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_yr[ii,kk] += -numpy.sum(sigma_xl/(A*r_xl))
-        Phi_yr[ii,kk] += -numpy.sum(sigma_xr/(A*r_xr))
+        Phi_yr[ii,kk] = convolve(mass_list, r_list)
+        true_yr[ii,kk] = true(masses,x,y,z)
 
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.x[ii])**2 + (a.ymin - a.ymax)**2 + (a.z3d[:,a.jlo,:] - a.z[kk])**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.x[ii])**2 +                        (a.z3d[:,a.jhi,:] - a.z[kk])**2 )
-
-        Phi_yr[ii,kk] += -numpy.sum(sigma_yl/(A*r_yl))
-        Phi_yr[ii,kk] += -numpy.sum(numpy.where( r_yr == 0.0, 0.0, sigma_yr/(A*r_yr) ))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.klo] - a.ymax)**2 + (a.zmin - a.z[kk])**2 )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.khi] - a.ymax)**2 + (a.zmax - a.z[kk])**2 )
-
-        Phi_yr[ii,kk] += -numpy.sum(sigma_zl/(A*r_zl))
-        Phi_yr[ii,kk] += -numpy.sum(sigma_zr/(A*r_zr))
-
-Phi_yr *= a.dx*a.dy
-
-print numpy.min(Phi_yr[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_yr[a.jlo:a.jhi+1,a.klo:a.khi+1])
+print numpy.min(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1]), numpy.max(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1])
 
 # -z face
-Phi_zl = numpy.zeros(sigma_zl.shape)
+Phi_zl = numpy.zeros(mass_zl.shape)
+true_zl = numpy.zeros(mass_zl.shape)
 
 for jj in range(a.jlo, a.jhi+1):
     for ii in range(a.ilo, a.ihi+1):
 
         # we are in the z = zmin plane
 
-        # sigma coords - Phi coords
+        x = a.x[ii]
+        y = a.y[jj]
+        z = a.zmin
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt( (a.xmin - a.x[ii])**2 + (a.y3d[a.ilo,:,:] - a.y[jj])**2 + (a.z3d[a.ilo,:,:] - a.zmin)**2 )
-        r_xr = numpy.sqrt( (a.xmax - a.x[ii])**2 + (a.y3d[a.ihi,:,:] - a.y[jj])**2 + (a.z3d[a.ihi,:,:] - a.zmin)**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_zl[ii,jj] += -numpy.sum(sigma_xl/(A*r_xl))
-        Phi_zl[ii,jj] += -numpy.sum(sigma_xr/(A*r_xr))
+        Phi_zl[ii,jj] = convolve(mass_list, r_list)
+        true_zl[ii,jj] = true(masses,x,y,z)
 
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.x[ii])**2 + (a.ymin - a.y[jj])**2 + (a.z3d[:,a.jlo,:] - a.zmin)**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.x[ii])**2 + (a.ymax - a.y[jj])**2 + (a.z3d[:,a.jhi,:] - a.zmin)**2 )
-
-        Phi_zl[ii,jj] += -numpy.sum(sigma_yl/(A*r_yl))
-        Phi_zl[ii,jj] += -numpy.sum(sigma_yr/(A*r_yr))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.klo] - a.y[jj])**2                        )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.khi] - a.x[ii])**2 + (a.y3d[:,:,a.khi] - a.y[jj])**2 + (a.zmax - a.zmin)**2 )
-
-        Phi_zl[ii,jj] += -numpy.sum(numpy.where( r_zl == 0.0, 0.0, sigma_zl/(A*r_zl) )) 
-        Phi_zl[ii,jj] += -numpy.sum(sigma_zr/(A*r_zr))
-
-Phi_zl *= a.dx*a.dy
-
-print numpy.min(Phi_zl[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_zl[a.jlo:a.jhi+1,a.klo:a.khi+1])
+print numpy.min(Phi_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1]), numpy.max(Phi_zl[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
 
 # +z face
-Phi_zr = numpy.zeros(sigma_zr.shape)
+Phi_zr = numpy.zeros(mass_zr.shape)
+true_zr = numpy.zeros(mass_zr.shape)
 
 for jj in range(a.jlo, a.jhi+1):
     for ii in range(a.ilo, a.ihi+1):
 
         # we are in the z = zmax plane
 
-        # sigma coords - Phi coords
+        x = a.x[ii]
+        y = a.y[jj]
+        z = a.zmax
 
-        # sum over sigma_xl and sigma_xr -- we are at a fixed x
-        r_xl = numpy.sqrt( (a.xmin - a.x[ii])**2 + (a.y3d[a.ilo,:,:] - a.y[jj])**2 + (a.z3d[a.ilo,:,:] - a.zmax)**2 )
-        r_xr = numpy.sqrt( (a.xmax - a.x[ii])**2 + (a.y3d[a.ihi,:,:] - a.y[jj])**2 + (a.z3d[a.ihi,:,:] - a.zmax)**2 )
+        r_list = create_r(x,y,z,a)
 
-        Phi_zr[ii,jj] += -numpy.sum(sigma_xl/(A*r_xl))
-        Phi_zr[ii,jj] += -numpy.sum(sigma_xr/(A*r_xr))
-
-        # sum over sigma_yl and sigma_yr -- we are at a fixed y
-        r_yl = numpy.sqrt( (a.x3d[:,a.jlo,:] - a.x[ii])**2 + (a.ymin - a.y[jj])**2 + (a.z3d[:,a.jlo,:] - a.zmax)**2 )
-        r_yr = numpy.sqrt( (a.x3d[:,a.jhi,:] - a.x[ii])**2 + (a.ymax - a.y[jj])**2 + (a.z3d[:,a.jhi,:] - a.zmax)**2 )
-
-        Phi_zr[ii,jj] += -numpy.sum(sigma_yl/(A*r_yl))
-        Phi_zr[ii,jj] += -numpy.sum(sigma_yr/(A*r_yr))
-
-        # sum over sigma_zl and sigma_zr -- we are at a fixed z
-        r_zl = numpy.sqrt( (a.x3d[:,:,a.klo] - a.x[ii])**2 + (a.y3d[:,:,a.klo] - a.y[jj])**2 + (a.zmin - a.zmax)**2 )
-        r_zr = numpy.sqrt( (a.x3d[:,:,a.khi] - a.x[ii])**2 + (a.y3d[:,:,a.khi] - a.y[jj])**2                        )
-
-        Phi_zr[ii,jj] += -numpy.sum(sigma_zl/(A*r_zl)) 
-        Phi_zr[ii,jj] += -numpy.sum(numpy.where( r_zr == 0.0, 0.0, sigma_zr/(A*r_zr) ))
+        Phi_zr[ii,jj] = convolve(mass_list, r_list)
+        true_zr[ii,jj] = true(masses,x,y,z)
                 
-Phi_zr *= a.dx*a.dy
+print numpy.min(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1]), numpy.max(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
 
-print numpy.min(Phi_zr[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_zr[a.jlo:a.jhi+1,a.klo:a.khi+1])
-                    
 
-# 4. solve for Phi
+# 4. solve for the isolated potential
 
 # we do inhomogeneous BCs for this, and solve Laplace's equation.  The
 # BCs are simply the Phi's on the surfaces constructed above.
-a = multigrid.ccMG3d(nx, ny, nz,
+b = multigrid.ccMG3d(nx, ny, nz,
                      xlBCtype="dirichlet", xrBCtype="dirichlet",
                      ylBCtype="dirichlet", yrBCtype="dirichlet",
                      zlBCtype="dirichlet", zrBCtype="dirichlet",
                      xlBC=Phi_xl, xrBC=Phi_xr,
                      ylBC=Phi_yl, yrBC=Phi_yr,
                      zlBC=Phi_zl, zrBC=Phi_zr,
-                     verbose=1)
+                     verbose=0)
 
 # initialize the solution to 0
-a.initZeros()
+b.initZeros()
 
-# initialize the RHS to 0 -- Laplace's equation
-a.initRHS(a.solnGrid.scratchArray())
+# initialize the RHS
+b.initRHS(rhs)
 
 # solve to a relative tolerance of 1.e-11
-a.solve(rtol=1.e-11)
+b.solve(rtol=1.e-11)
 
-# get the solution -- this is the homogeneous potential
-Phi = a.getSolution()
-
-
-# 5. compute the isolated potential
-phi = phi_h - Phi
-
+# get the solution -- this is the isolated potential
+phi = b.getSolution()
 
 #-----------------------------------------------------------------------------
 # compute the error from the analytic solution
-b = true(masses,a.x3d,a.y3d,a.z3d)
-e = phi - b
+c = multigrid.ccMG3d(nx, ny, nz,
+                     xlBCtype="dirichlet", xrBCtype="dirichlet",
+                     ylBCtype="dirichlet", yrBCtype="dirichlet",
+                     zlBCtype="dirichlet", zrBCtype="dirichlet",
+                     xlBC=true_xl, xrBC=true_xr,
+                     ylBC=true_yl, yrBC=true_yr,
+                     zlBC=true_zl, zrBC=true_zr,
+                     verbose=0)
+
+c.initZeros()
+c.initRHS(rhs)
+c.solve(rtol=1.e-11)
+t = c.getSolution()
+
+e = phi - t
 
 print " L2 error from true solution = %g\n rel. err from previous cycle = %g\n num. cycles = %d" % \
-      (error(a.solnGrid, e), a.relativeError, a.numCycles)
+      (error(a.solnGrid, e) / error(a.solnGrid,t), a.relativeError, a.numCycles)
 
+print "Min (phi) = ", numpy.min(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (phi) = ", numpy.max(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
+print "Min (true) = ", numpy.min(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (true) = ", numpy.max(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 #-----------------------------------------------------------------------------
 # visualize -- slices through the center
 v = phi
-pylab.subplot(131)
+pylab.subplot(231)
 pylab.imshow(v[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo+a.nz/2])
 
-pylab.subplot(132)
+pylab.subplot(232)
 pylab.imshow(v[a.ilo:a.ihi+1,a.jlo+a.ny/2,a.klo:a.khi+1])
 
-pylab.subplot(133)
+pylab.subplot(233)
 pylab.imshow(v[a.ilo+a.nx/2,a.jlo:a.jhi+1,a.klo:a.khi+1])
 
+pylab.subplot(234)
+pylab.imshow(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo+a.nz/2])
+
+pylab.subplot(235)
+pylab.imshow(t[a.ilo:a.ihi+1,a.jlo+a.ny/2,a.klo:a.khi+1])
+
+pylab.subplot(236)
+pylab.imshow(t[a.ilo+a.nx/2,a.jlo:a.jhi+1,a.klo:a.khi+1])
+
 pylab.show()
-
-
