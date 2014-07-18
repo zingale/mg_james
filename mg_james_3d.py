@@ -9,20 +9,15 @@ Superposition tells us the analytic solution
 """
 
 import math
-import numpy
+import numpy as np
 import patch
 import multigrid
 import pylab
 
 G = 1.0
 
-#nx = 4
-#nx = 8
-#nx = 16
 nx = 32
-#nx = 64
-#nx = 128
-#nx = 256
+
 ny = nx
 nz = nx
 
@@ -38,9 +33,9 @@ zmax = 1.0
 # the analytic solution
 def true(grid, x, y, z):
 
-    phi = numpy.zeros(numpy.shape(x))
+    phi = np.zeros(np.shape(x))
 
-    c = numpy.zeros( (2, 3) )
+    c = np.zeros( (2, 3) )
 
     for kk in range(0, grid.nz + 2):
         z = grid.z[kk]
@@ -79,51 +74,46 @@ def true(grid, x, y, z):
     return phi
 
 #-----------------------------------------------------------------------------
-# the righthand side
+# the righthand side -- this initializes a cube in the center of the domain.
+# this assumes that our domain runs from -1 to 1 in each coordinate direction.
 def f(grid):
 
     f = grid.scratchArray()
 
     rho = 1.0
 
-    for kk in range(1, grid.nz + 1):
-        z = grid.z[kk]
-        for jj in range(1, grid.ny + 1):
-            y = grid.y[jj]
-            for ii in range(1, grid.nx + 1):
-                x = grid.x[ii]
+    # indices of a cube from -0.5 to 0.5 in the domain
+    index = np.logical_and(abs(grid.x3d) < 0.5,
+                           np.logical_and(abs(grid.y3d) < 0.5, 
+                                          abs(grid.z3d) < 0.5))
 
-                if (abs(x) < 0.5 and abs(y) < 0.5 and abs(z) < 0.5):
-                    f[ii,jj,kk] = 4.0 * math.pi * G * rho
-                else:
-                    f[ii,jj,kk] = 0.0
+    f[index] = 4.0*np.pi*G*rho
 
     return f
 
 
 #-----------------------------------------------------------------------------
 # the L2 error norm
-def error(myg, r):
+def error(g, r):
 
-    # L2 norm of elements in r, multiplied by dx to
-    # normalize
+    # L2 norm of the *faces*
 
     err = 0.0
-    err += numpy.sum((r[myg.ilo,myg.jlo:myg.jhi+1,myg.klo:myg.khi+1]**2).flat)
-    err += numpy.sum((r[myg.ihi,myg.jlo:myg.jhi+1,myg.klo:myg.khi+1]**2).flat)
-    err += numpy.sum((r[myg.ilo:myg.ihi+1,myg.jlo,myg.klo:myg.khi+1]**2).flat)
-    err += numpy.sum((r[myg.ilo:myg.ihi+1,myg.jhi,myg.klo:myg.khi+1]**2).flat)
-    err += numpy.sum((r[myg.ilo:myg.ihi+1,myg.jlo:myg.jhi+1,myg.klo]**2).flat)
-    err += numpy.sum((r[myg.ilo:myg.ihi+1,myg.jlo:myg.jhi+1,myg.khi]**2).flat)
+    err += np.sum((r[g.ilo,        g.jlo:g.jhi+1,g.klo:g.khi+1]**2).flat)
+    err += np.sum((r[g.ihi,        g.jlo:g.jhi+1,g.klo:g.khi+1]**2).flat)
+    err += np.sum((r[g.ilo:g.ihi+1,g.jlo,        g.klo:g.khi+1]**2).flat)
+    err += np.sum((r[g.ilo:g.ihi+1,g.jhi,        g.klo:g.khi+1]**2).flat)
+    err += np.sum((r[g.ilo:g.ihi+1,g.jlo:g.jhi+1,g.klo        ]**2).flat)
+    err += np.sum((r[g.ilo:g.ihi+1,g.jlo:g.jhi+1,g.khi        ]**2).flat)
 
-    return numpy.sqrt(myg.dx*myg.dy*myg.dz*err)
+    return np.sqrt(g.dx*g.dy*g.dz*err)
 
 
 #-----------------------------------------------------------------------------
 # the Green's function
 def green(r):
 
-    if (numpy.size(r) == 1):
+    if (np.size(r) == 1):
         if (r != 0.0):
             gf = -G / r
         else:
@@ -136,11 +126,11 @@ def green(r):
         z = r[:,:,3]
         r = r[:,:,0]
 
-        gf = numpy.zeros(r.shape)
+        gf = np.zeros(r.shape)
 
         gf[:,:] = -2.38008 * G / a.dx
 
-        loc = numpy.where(r != 0.0)
+        loc = np.where(r != 0.0)
 
         x = x[loc]
         y = y[loc]
@@ -178,68 +168,71 @@ def convolve(mass_list, r_list):
 
     phi = 0.0
 
-    for i in range(0,6):
+    # loop over the 6 faces
+    for i in range(6):
  
-        phi += numpy.sum(green(r_list[i]) * mass_list[i]) 
+        phi += np.sum(green(r_list[i]) * mass_list[i]) 
 
     return phi
+
 
 #-----------------------------------------------------------------------------
 # Create the distance functions that we're going to use for convolving over
 def create_r(x,y,z,a):
 
-        # we are at a fixed x
+    # we are at a fixed x
 
-        r_xl = numpy.zeros( ( numpy.shape(a.x3d[a.ilo,:,:])[0], numpy.shape(a.x3d[a.ilo,:,:])[1], 4) )
-        r_xr = numpy.zeros( ( numpy.shape(a.x3d[a.ihi,:,:])[0], numpy.shape(a.x3d[a.ihi,:,:])[1], 4) )
+    r_xl = np.zeros((a.qy, a.qz, 4))
+    r_xr = np.zeros((a.qy, a.qz, 4))
 
-        r_xl[:,:,1] = a.xmin - x
-        r_xl[:,:,2] = a.y3d[a.ilo,:,:] - y
-        r_xl[:,:,3] = a.z3d[a.ilo,:,:] - z
+    r_xl[:,:,1] = a.xmin - x
+    r_xl[:,:,2] = a.y3d[a.ilo,:,:] - y
+    r_xl[:,:,3] = a.z3d[a.ilo,:,:] - z
 
-        r_xl[:,:,0] = (r_xl[:,:,1]**2 + r_xl[:,:,2]**2 + r_xl[:,:,3]**2)**0.5
+    r_xl[:,:,0] = np.sqrt(r_xl[:,:,1]**2 + r_xl[:,:,2]**2 + r_xl[:,:,3]**2)
 
-        r_xr[:,:,1] = a.xmax - x
-        r_xr[:,:,2] = a.y3d[a.ihi,:,:] - y
-        r_xr[:,:,3] = a.z3d[a.ihi,:,:] - z
+    r_xr[:,:,1] = a.xmax - x
+    r_xr[:,:,2] = a.y3d[a.ihi,:,:] - y
+    r_xr[:,:,3] = a.z3d[a.ihi,:,:] - z
 
-        r_xr[:,:,0] = (r_xr[:,:,1]**2 + r_xr[:,:,2]**2 + r_xr[:,:,3]**2)**0.5
+    r_xr[:,:,0] = np.sqrt(r_xr[:,:,1]**2 + r_xr[:,:,2]**2 + r_xr[:,:,3]**2)
 
-        # we are at a fixed y
- 
-        r_yl = numpy.zeros( ( numpy.shape(a.y3d[:,a.jlo,:])[0], numpy.shape(a.y3d[:,a.jlo,:])[1], 4) )
-        r_yr = numpy.zeros( ( numpy.shape(a.y3d[:,a.jhi,:])[0], numpy.shape(a.y3d[:,a.jhi,:])[1], 4) )
+    # we are at a fixed y
+    
+    r_yl = np.zeros((a.qx, a.qz, 4))
+    r_yr = np.zeros((a.qx, a.qz, 4))
+    
+    r_yl[:,:,1] = a.x3d[:,a.jlo,:] - x
+    r_yl[:,:,2] = a.ymin - y
+    r_yl[:,:,3] = a.z3d[:,a.jlo,:] - z
 
-        r_yl[:,:,1] = a.x3d[:,a.jlo,:] - x
-        r_yl[:,:,2] = a.ymin - y
-        r_yl[:,:,3] = a.z3d[:,a.jlo,:] - z
+    r_yl[:,:,0] = np.sqrt(r_yl[:,:,1]**2 + r_yl[:,:,2]**2 + r_yl[:,:,3]**2)
 
-        r_yl[:,:,0] = (r_yl[:,:,1]**2 + r_yl[:,:,2]**2 + r_yl[:,:,3]**2)**0.5
+    r_yr[:,:,1] = a.x3d[:,a.jhi,:] - x
+    r_yr[:,:,2] = a.ymax - y
+    r_yr[:,:,3] = a.z3d[:,a.jhi,:] - z
 
-        r_yr[:,:,1] = a.x3d[:,a.jhi,:] - x
-        r_yr[:,:,2] = a.ymax - y
-        r_yr[:,:,3] = a.z3d[:,a.jhi,:] - z
-
-        r_yr[:,:,0] = (r_yr[:,:,1]**2 + r_yr[:,:,2]**2 + r_yr[:,:,3]**2)**0.5
+    r_yr[:,:,0] = np.sqrt(r_yr[:,:,1]**2 + r_yr[:,:,2]**2 + r_yr[:,:,3]**2)
        
-        # we are at a fixed z
+    # we are at a fixed z
 
-        r_zl = numpy.zeros( ( numpy.shape(a.z3d[:,:,a.klo])[0], numpy.shape(a.z3d[:,:,a.klo])[1], 4) )
-        r_zr = numpy.zeros( ( numpy.shape(a.z3d[:,:,a.khi])[0], numpy.shape(a.z3d[:,:,a.khi])[1], 4) )
+    r_zl = np.zeros((a.qx, a.qy, 4))
+    r_zr = np.zeros((a.qx, a.qy, 4))
 
-        r_zl[:,:,1] = a.x3d[:,:,a.klo] - x
-        r_zl[:,:,2] = a.y3d[:,:,a.klo] - y
-        r_zl[:,:,3] = a.zmin - z
+    r_zl[:,:,1] = a.x3d[:,:,a.klo] - x
+    r_zl[:,:,2] = a.y3d[:,:,a.klo] - y
+    r_zl[:,:,3] = a.zmin - z
 
-        r_zl[:,:,0] = (r_zl[:,:,1]**2 + r_zl[:,:,2]**2 + r_zl[:,:,3]**2)**0.5
+    r_zl[:,:,0] = np.sqrt(r_zl[:,:,1]**2 + r_zl[:,:,2]**2 + r_zl[:,:,3]**2)
 
-        r_zr[:,:,1] = a.x3d[:,:,a.khi] - x
-        r_zr[:,:,2] = a.y3d[:,:,a.khi] - y
-        r_zr[:,:,3] = a.zmax - z
+    r_zr[:,:,1] = a.x3d[:,:,a.khi] - x
+    r_zr[:,:,2] = a.y3d[:,:,a.khi] - y
+    r_zr[:,:,3] = a.zmax - z
+    
+    r_zr[:,:,0] = np.sqrt(r_zr[:,:,1]**2 + r_zr[:,:,2]**2 + r_zr[:,:,3]**2)
 
-        r_zr[:,:,0] = (r_zr[:,:,1]**2 + r_zr[:,:,2]**2 + r_zr[:,:,3]**2)**0.5
+    return (r_xl, r_xr, r_yl, r_yr, r_zl, r_zr)
 
-        return (r_xl, r_xr, r_yl, r_yr, r_zl, r_zr)
 
 #-----------------------------------------------------------------------------
 # the main solve -- James algorithm
@@ -263,7 +256,7 @@ a.initZeros()
 rhs = f(a.solnGrid)
 a.initRHS(rhs)
 
-mass = numpy.sum(rhs) / (4.0 * math.pi * G) * a.dx * a.dy * a.dz
+mass = np.sum(rhs) / (4.0 * math.pi * G) * a.dx * a.dy * a.dz
 
 # solve to a relative tolerance of 1.e-11
 a.solve(rtol=1.e-11)
@@ -279,35 +272,55 @@ const = 1.0 / (4.0 * math.pi * G)
 # sigma = grad phi_h . n / (4pi G)
 # mass  = sigma . dA
 
-# Make sure that we only sum over masses adjacent to the domain faces. Edges and corners don't count, so we leave those entries zeroed out.
+# Make sure that we only sum over masses adjacent to the domain
+# faces. Edges and corners don't count, so we leave those entries
+# zeroed out.
+
+# we compute grad phi_h . n by constructing a quadratic interpolant
+# whose average reproduces the cell values of the first two interior
+# zones and is equal to 0 on the boundary.  This gives:
+#
+# phi'_{-1/2} = (7 phi_0 - phi_1)/(2 dx) + O(dx**2)
 
 dA = a.dy * a.dz
 
-mass_xl = numpy.zeros(phi_h[a.ilo,:,:].shape)
-mass_xr = numpy.zeros(phi_h[a.ihi,:,:].shape)
+mass_xl = np.zeros(phi_h[a.ilo,:,:].shape)
+mass_xr = np.zeros(phi_h[a.ihi,:,:].shape)
 
-mass_xl[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo,a.jlo:a.jhi+1,a.klo:a.khi+1] - phi_h[a.ilo+1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx ) * const * dA
-mass_xr[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ihi,a.jlo:a.jhi+1,a.klo:a.khi+1] - phi_h[a.ihi-1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx ) * const * dA
+mass_xl[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ilo,  a.jlo:a.jhi+1,a.klo:a.khi+1] - 
+               phi_h[a.ilo+1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx 
+mass_xr[a.jlo:a.jhi+1,a.klo:a.khi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ihi,  a.jlo:a.jhi+1,a.klo:a.khi+1] - 
+               phi_h[a.ihi-1,a.jlo:a.jhi+1,a.klo:a.khi+1]) / a.dx 
 
 dA = a.dx * a.dz
 
-mass_yl = numpy.zeros(phi_h[:,a.jlo,:].shape)
-mass_yr = numpy.zeros(phi_h[:,a.jhi,:].shape)
+mass_yl = np.zeros(phi_h[:,a.jlo,:].shape)
+mass_yr = np.zeros(phi_h[:,a.jhi,:].shape)
 
-mass_yl[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo,a.klo:a.khi+1] - phi_h[a.ilo:a.ihi+1,a.jlo+1,a.klo:a.khi+1]) / a.dy ) * const * dA
-mass_yr[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jhi,a.klo:a.khi+1] - phi_h[a.ilo:a.ihi+1,a.jhi-1,a.klo:a.khi+1]) / a.dy ) * const * dA
+mass_yl[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo,  a.klo:a.khi+1] - 
+               phi_h[a.ilo:a.ihi+1,a.jlo+1,a.klo:a.khi+1]) / a.dy 
+mass_yr[a.ilo:a.ihi+1,a.klo:a.khi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ilo:a.ihi+1,a.jhi,  a.klo:a.khi+1] - 
+               phi_h[a.ilo:a.ihi+1,a.jhi-1,a.klo:a.khi+1]) / a.dy 
 
 dA = a.dx * a.dy
 
-mass_zl = numpy.zeros(phi_h[:,:,a.klo].shape)
-mass_zr = numpy.zeros(phi_h[:,:,a.khi].shape)
+mass_zl = np.zeros(phi_h[:,:,a.klo].shape)
+mass_zr = np.zeros(phi_h[:,:,a.khi].shape)
 
-mass_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo] - phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo+1]) / a.dz ) * const * dA
-mass_zr[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * ( (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi] - phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi-1]) / a.dz ) * const * dA
+mass_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo  ] - 
+               phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo+1]) / a.dz 
+mass_zr[a.ilo:a.ihi+1,a.jlo:a.jhi+1] = -0.5 * const * dA * \
+        (7.0 * phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi  ] - 
+               phi_h[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.khi-1]) / a.dz 
 
 mass_list = (mass_xl, mass_xr, mass_yl, mass_yr, mass_zl, mass_zr)
 
-totalMass = numpy.sum(mass_list)
+totalMass = np.sum(mass_list)
 trueMass = 1.0
 actualMass = mass
 
@@ -320,7 +333,7 @@ print "Relative error in surface mass to true mass =", abs(totalMass - trueMass)
 # 3. compute the boundary conditions on phi
 
 # -x face
-Phi_xl = numpy.zeros(mass_xl.shape)
+Phi_xl = np.zeros(mass_xl.shape)
 
 for kk in range(a.klo, a.khi+1):
     for jj in range(a.jlo, a.jhi+1):
@@ -335,10 +348,10 @@ for kk in range(a.klo, a.khi+1):
 
         Phi_xl[jj,kk] = convolve(mass_list, r_list)
 
-#print numpy.min(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1])
+#print np.min(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1]), np.max(Phi_xl[a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 # +x face
-Phi_xr = numpy.zeros(mass_xr.shape)
+Phi_xr = np.zeros(mass_xr.shape)
 
 for kk in range(a.klo, a.khi+1):
     for jj in range(a.jlo, a.jhi+1):
@@ -354,10 +367,10 @@ for kk in range(a.klo, a.khi+1):
         Phi_xr[jj,kk] = convolve(mass_list, r_list)
 #        true_xr[jj,kk] = true(masses,x,y,z)
 
-#print numpy.min(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1]), numpy.max(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1])
+#print np.min(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1]), np.max(Phi_xr[a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 # -y face
-Phi_yl = numpy.zeros(mass_yl.shape)
+Phi_yl = np.zeros(mass_yl.shape)
 
 for kk in range(a.klo, a.khi+1):
     for ii in range(a.ilo, a.ihi+1):
@@ -372,10 +385,10 @@ for kk in range(a.klo, a.khi+1):
 
         Phi_yl[ii,kk] = convolve(mass_list, r_list)
 
-#print numpy.min(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1]), numpy.max(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1])
+#print np.min(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1]), np.max(Phi_yl[a.ilo:a.ihi+1,a.klo:a.khi+1])
 
 # +y face
-Phi_yr = numpy.zeros(mass_yr.shape)
+Phi_yr = np.zeros(mass_yr.shape)
 
 for kk in range(a.klo, a.khi+1):
     for ii in range(a.ilo, a.ihi+1):
@@ -390,10 +403,10 @@ for kk in range(a.klo, a.khi+1):
 
         Phi_yr[ii,kk] = convolve(mass_list, r_list)
 
-#print numpy.min(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1]), numpy.max(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1])
+#print np.min(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1]), np.max(Phi_yr[a.ilo:a.ihi+1,a.klo:a.khi+1])
 
 # -z face
-Phi_zl = numpy.zeros(mass_zl.shape)
+Phi_zl = np.zeros(mass_zl.shape)
 
 for jj in range(a.jlo, a.jhi+1):
     for ii in range(a.ilo, a.ihi+1):
@@ -408,10 +421,10 @@ for jj in range(a.jlo, a.jhi+1):
 
         Phi_zl[ii,jj] = convolve(mass_list, r_list)
 
-#print numpy.min(Phi_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1]), numpy.max(Phi_zl[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
+#print np.min(Phi_zl[a.ilo:a.ihi+1,a.jlo:a.jhi+1]), np.max(Phi_zl[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
 
 # +z face
-Phi_zr = numpy.zeros(mass_zr.shape)
+Phi_zr = np.zeros(mass_zr.shape)
 
 for jj in range(a.jlo, a.jhi+1):
     for ii in range(a.ilo, a.ihi+1):
@@ -426,7 +439,7 @@ for jj in range(a.jlo, a.jhi+1):
 
         Phi_zr[ii,jj] = convolve(mass_list, r_list)
                 
-#print numpy.min(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1]), numpy.max(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
+#print np.min(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1]), np.max(Phi_zr[a.ilo:a.ihi+1,a.ilo:a.ihi+1])
 
 
 # 4. solve for the isolated potential
@@ -465,8 +478,8 @@ e = phi - t
 print " L2 error from true solution = %g\n rel. err from previous cycle = %g\n num. cycles = %d" % \
       (error(a.solnGrid, e) / error(a.solnGrid,t), a.relativeError, a.numCycles)
 
-print "Min (phi) = ", numpy.min(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (phi) = ", numpy.max(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
-print "Min (true) = ", numpy.min(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (true) = ", numpy.max(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
+print "Min (phi) = ", np.min(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (phi) = ", np.max(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
+print "Min (true) = ", np.min(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (true) = ", np.max(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
 
 #-----------------------------------------------------------------------------
 # visualize -- slices through the center
