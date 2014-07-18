@@ -447,6 +447,7 @@ for jj in range(a.jlo, a.jhi+1):
 # we do inhomogeneous BCs for this, and solve Laplace's equation.  The
 # BCs are simply the Phi's on the surfaces constructed above.
 b = multigrid.ccMG3d(nx, ny, nz,
+                     xmin=xmin, ymin=ymin, zmin=zmin,
                      xmax=xmax, ymax=ymax, zmax=zmax,
                      xlBCtype="dirichlet", xrBCtype="dirichlet",
                      ylBCtype="dirichlet", yrBCtype="dirichlet",
@@ -470,6 +471,8 @@ phi = b.getSolution()
 
 #-----------------------------------------------------------------------------
 # compute the error from the analytic solution
+
+print "getting true"
 
 t = true(a.solnGrid, a.x3d, a.y3d, a.z3d)
 
@@ -501,5 +504,7 @@ pylab.imshow(t[a.ilo:a.ihi+1,a.jlo+a.ny/2,a.klo:a.khi+1])
 
 pylab.subplot(236)
 pylab.imshow(t[a.ilo+a.nx/2,a.jlo:a.jhi+1,a.klo:a.khi+1])
+
+pylab.savefig("plot.png")
 
 #pylab.show()
