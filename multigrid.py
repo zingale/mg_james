@@ -166,9 +166,45 @@ class ccMG3d:
             self.grids.append(patch.ccData3d(myGrid, dtype=numpy.float64))
 
             # create the boundary condition object
-            bcObj = patch.bcObject(xlb=xlBCtype, xrb=xrBCtype,
-                                   ylb=ylBCtype, yrb=yrBCtype,
-                                   zlb=zlBCtype, zrb=zrBCtype)
+            
+            if not i == self.nlevels-1:
+                if xlBCtype == "dirichlet-ho":
+                    xlb = "dirichlet"
+                else:
+                    xlb = xlBCtype
+
+                if xrBCtype == "dirichlet-ho":
+                    xrb = "dirichlet"
+                else:
+                    xrb = xrBCtype
+
+                if ylBCtype == "dirichlet-ho":
+                    ylb = "dirichlet"
+                else:
+                    ylb = ylBCtype
+
+                if yrBCtype == "dirichlet-ho":
+                    yrb = "dirichlet"
+                else:
+                    yrb = yrBCtype
+
+                if zlBCtype == "dirichlet-ho":
+                    zlb = "dirichlet"
+                else:
+                    zlb = zlBCtype
+
+                if zrBCtype == "dirichlet-ho":
+                    zrb = "dirichlet"
+                else:
+                    zrb = zrBCtype
+
+                bcObj = patch.bcObject(xlb=xlb, xrb=xrb,
+                                       ylb=ylb, yrb=yrb,
+                                       zlb=zlb, zrb=zrb)
+            else:
+                bcObj = patch.bcObject(xlb=xlBCtype, xrb=xrBCtype,
+                                       ylb=ylBCtype, yrb=yrBCtype,
+                                       zlb=zlBCtype, zrb=zrBCtype)
 
             self.grids[i].registerVar("v", bcObj)
             self.grids[i].registerVar("f", bcObj)

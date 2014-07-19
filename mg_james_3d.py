@@ -16,7 +16,7 @@ import pylab
 
 G = 1.0
 
-nx = 32
+nx = 64
 
 ny = nx
 nz = nx
@@ -245,8 +245,8 @@ a = multigrid.ccMG3d(nx, ny, nz,
                      xmin=xmin, ymin=ymin, zmin=zmin,
                      xmax=xmax, ymax=ymax, zmax=zmax,
                      xlBCtype="dirichlet-ho", xrBCtype="dirichlet-ho",
-                     ylBCtype="dirichlet-ho", yrBCtype="dirichlet",
-                     zlBCtype="dirichlet-ho", zrBCtype="dirichlet",
+                     ylBCtype="dirichlet-ho", yrBCtype="dirichlet-ho",
+                     zlBCtype="dirichlet-ho", zrBCtype="dirichlet-ho",
                      smoother="GS",
                      verbose=0)
 
@@ -261,6 +261,7 @@ mass = np.sum(rhs) / (4.0 * math.pi * G) * a.dx * a.dy * a.dz
 
 # solve to a relative tolerance of 1.e-11
 a.solve(rtol=1.e-11)
+#a.smooth(a.nlevels-1, 10000)
 
 # get the solution -- this is the homogeneous potential
 phi_h = a.getSolution()
