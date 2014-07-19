@@ -88,12 +88,15 @@ class ccMG3d:
                  ylBC=0.0, yrBC=0.0,
                  zlBC=0.0, zrBC=0.0,
                  alpha=0.0, beta=-1.0,
+                 smoother="GS",
                  verbose=0):
 
         if (nx != ny or nx != nz):
             print "ERROR: multigrid currently requires nx = ny = nz"
             return -1
         
+        self.smoother = smoother
+
         self.nx = nx
         self.ny = ny        
         self.nz = nz
@@ -336,51 +339,86 @@ class ccMG3d:
 
         self.grids[level].fillBC("v")
 
-        # do red-black G-S
-        i = 0
-        while (i < nsmooth):
+        xcoeff = self.beta/myg.dx**2
+        ycoeff = self.beta/myg.dy**2
+        zcoeff = self.beta/myg.dz**2
 
-            xcoeff = self.beta/myg.dx**2
-            ycoeff = self.beta/myg.dy**2
-            zcoeff = self.beta/myg.dz**2
+        if self.smoother == "GS":
 
-            # do the red black updating in eight decoupled groups
+            # do red-black G-S
+            i = 0
+            while i < nsmooth:
 
-            for n, (ix, iy, iz) in enumerate([(0,0,0), (1,1,0), (1,0,1), (0,1,1),
-                                              (1,0,0), (0,1,0), (0,0,1), (1,1,1)]):
+                # do the red black updating in eight decoupled groups
+                for n, (ix, iy, iz) in enumerate([(0,0,0), (1,1,0), (1,0,1), (0,1,1),
+                                                  (1,0,0), (0,1,0), (0,0,1), (1,1,1)]):
 
-                # -x, -y, -z
-                v[myg.ilo+ix:myg.ihi+1:2,
-                  myg.jlo+iy:myg.jhi+1:2,
-                  myg.klo+iz:myg.khi+1:2] = \
-                    (f[myg.ilo+ix:myg.ihi+1:2,
-                       myg.jlo+iy:myg.jhi+1:2,
-                       myg.klo+iz:myg.khi+1:2] +
-                     xcoeff*(v[myg.ilo+1+ix:myg.ihi+2:2,
-                               myg.jlo+iy  :myg.jhi+1:2,
-                               myg.klo+iz  :myg.khi+1:2] +
-                             v[myg.ilo-1+ix:myg.ihi  :2,
-                               myg.jlo+iy  :myg.jhi+1:2,
-                               myg.klo+iz  :myg.khi+1:2]) +
-                     ycoeff*(v[myg.ilo+ix  :myg.ihi+1:2,
-                               myg.jlo+1+iy:myg.jhi+2:2,
-                               myg.klo+iz  :myg.khi+1:2] +
-                             v[myg.ilo+ix  :myg.ihi+1:2,
-                               myg.jlo-1+iy:myg.jhi  :2,
-                               myg.klo+iz  :myg.khi+1:2]) +
-                     zcoeff*(v[myg.ilo+ix  :myg.ihi+1:2,
-                               myg.jlo+iy  :myg.jhi+1:2,
-                               myg.klo+1+iz:myg.khi+2:2] +
-                             v[myg.ilo+ix  :myg.ihi+1:2,
-                               myg.jlo+iy  :myg.jhi+1:2,
-                               myg.klo-1+iz:myg.khi  :2])) / \
-                    (self.alpha + 2.0*xcoeff + 2.0*ycoeff + 2.0*zcoeff)
-
-                if n == 3 or n == 7: 
-                    self.grids[level].fillBC("v")
+                    # -x, -y, -z
+                    v[myg.ilo+ix:myg.ihi+1:2,
+                      myg.jlo+iy:myg.jhi+1:2,
+                      myg.klo+iz:myg.khi+1:2] = \
+                        (f[myg.ilo+ix:myg.ihi+1:2,
+                           myg.jlo+iy:myg.jhi+1:2,
+                           myg.klo+iz:myg.khi+1:2] +
+                         xcoeff*(v[myg.ilo+1+ix:myg.ihi+2:2,
+                                   myg.jlo+iy  :myg.jhi+1:2,
+                                   myg.klo+iz  :myg.khi+1:2] +
+                                 v[myg.ilo-1+ix:myg.ihi  :2,
+                                   myg.jlo+iy  :myg.jhi+1:2,
+                                   myg.klo+iz  :myg.khi+1:2]) +
+                         ycoeff*(v[myg.ilo+ix  :myg.ihi+1:2,
+                                   myg.jlo+1+iy:myg.jhi+2:2,
+                                   myg.klo+iz  :myg.khi+1:2] +
+                                 v[myg.ilo+ix  :myg.ihi+1:2,
+                                   myg.jlo-1+iy:myg.jhi  :2,
+                                   myg.klo+iz  :myg.khi+1:2]) +
+                         zcoeff*(v[myg.ilo+ix  :myg.ihi+1:2,
+                                   myg.jlo+iy  :myg.jhi+1:2,
+                                   myg.klo+1+iz:myg.khi+2:2] +
+                                 v[myg.ilo+ix  :myg.ihi+1:2,
+                                   myg.jlo+iy  :myg.jhi+1:2,
+                                   myg.klo-1+iz:myg.khi  :2])) / \
+                        (self.alpha + 2.0*xcoeff + 2.0*ycoeff + 2.0*zcoeff)
+                    
+                    if n == 3 or n == 7: 
+                        self.grids[level].fillBC("v")
             
-            i += 1
+                i += 1
 
+
+        elif self.smoother == "jacobi":
+
+            # do Jacobi smoothing
+            i = 0
+            while i < nsmooth:
+
+                v[myg.ilo:myg.ihi+1:2,myg.jlo:myg.jhi+1:2,myg.klo:myg.khi+1:2] = \
+                    (f[myg.ilo:myg.ihi+1:2,
+                       myg.jlo:myg.jhi+1:2,
+                       myg.klo:myg.khi+1:2] +
+                     xcoeff*(v[myg.ilo+1:myg.ihi+2:2,
+                               myg.jlo  :myg.jhi+1:2,
+                               myg.klo  :myg.khi+1:2] +
+                             v[myg.ilo-1:myg.ihi  :2,
+                               myg.jlo  :myg.jhi+1:2,
+                               myg.klo  :myg.khi+1:2]) +
+                     ycoeff*(v[myg.ilo  :myg.ihi+1:2,
+                               myg.jlo+1:myg.jhi+2:2,
+                               myg.klo  :myg.khi+1:2] +
+                             v[myg.ilo  :myg.ihi+1:2,
+                               myg.jlo-1:myg.jhi  :2,
+                               myg.klo  :myg.khi+1:2]) +
+                     zcoeff*(v[myg.ilo  :myg.ihi+1:2,
+                               myg.jlo  :myg.jhi+1:2,
+                               myg.klo+1:myg.khi+2:2] +
+                             v[myg.ilo  :myg.ihi+1:2,
+                               myg.jlo  :myg.jhi+1:2,
+                               myg.klo-1:myg.khi  :2])) / \
+                    (self.alpha + 2.0*xcoeff + 2.0*ycoeff + 2.0*zcoeff)
+                    
+                self.grids[level].fillBC("v")
+            
+                i += 1
 
 
     def solve(self, rtol = 1.e-11):

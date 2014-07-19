@@ -244,9 +244,10 @@ def create_r(x,y,z,a):
 a = multigrid.ccMG3d(nx, ny, nz,
                      xmin=xmin, ymin=ymin, zmin=zmin,
                      xmax=xmax, ymax=ymax, zmax=zmax,
-                     xlBCtype="dirichlet", xrBCtype="dirichlet",
-                     ylBCtype="dirichlet", yrBCtype="dirichlet",
-                     zlBCtype="dirichlet", zrBCtype="dirichlet",
+                     xlBCtype="dirichlet-ho", xrBCtype="dirichlet-ho",
+                     ylBCtype="dirichlet-ho", yrBCtype="dirichlet-ho",
+                     zlBCtype="dirichlet-ho", zrBCtype="dirichlet-ho",
+                     smoother="jacobi",
                      verbose=0)
 
 # initialize the solution to 0
