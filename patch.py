@@ -37,7 +37,7 @@ fill the ghost cells
 
 """
 
-import numpy
+import numpy as np
 import pickle
 import sys
 
@@ -63,10 +63,10 @@ class bcObject:
         # "y")
 
         # -x boundary
-        if (xlb in valid):
+        if xlb in valid:
             self.xlb = xlb
-            if (self.xlb == "reflect"):
-                if (oddReflectDir == "x"):
+            if self.xlb == "reflect":
+                if oddReflectDir == "x":
                     self.xlb = "reflect-odd"
                 else:
                     self.xlb = "reflect-even"
@@ -75,10 +75,10 @@ class bcObject:
             sys.exit("ERROR: xlb = %s invalid BC" % (xlb))
 
         # +x boundary
-        if (xrb in valid):
+        if xrb in valid:
             self.xrb = xrb
-            if (self.xrb == "reflect"):
-                if (oddReflectDir == "x"):
+            if self.xrb == "reflect":
+                if oddReflectDir == "x":
                     self.xrb = "reflect-odd"
                 else:
                     self.xrb = "reflect-even"
@@ -87,10 +87,10 @@ class bcObject:
             sys.exit("ERROR: xrb = %s invalid BC" % (xrb))
 
         # -y boundary
-        if (ylb in valid):
+        if ylb in valid:
             self.ylb = ylb
-            if (self.ylb == "reflect"):
-                if (oddReflectDir == "y"):
+            if self.ylb == "reflect":
+                if oddReflectDir == "y":
                     self.ylb = "reflect-odd"
                 else:
                     self.ylb = "reflect-even"
@@ -99,10 +99,10 @@ class bcObject:
             sys.exit("ERROR: ylb = %s invalid BC" % (ylb))
 
         # +y boundary
-        if (yrb in valid):
+        if yrb in valid:
             self.yrb = yrb
-            if (self.yrb == "reflect"):
-                if (oddReflectDir == "y"):
+            if self.yrb == "reflect":
+                if oddReflectDir == "y":
                     self.yrb = "reflect-odd"
                 else:
                     self.yrb = "reflect-even"
@@ -111,10 +111,10 @@ class bcObject:
             sys.exit("ERROR: yrb = %s invalid BC" % (yrb))
 
         # -z boundary
-        if (zlb in valid):
+        if zlb in valid:
             self.zlb = zlb
-            if (self.zlb == "reflect"):
-                if (oddReflectDir == "z"):
+            if self.zlb == "reflect":
+                if oddReflectDir == "z":
                     self.zlb = "reflect-odd"
                 else:
                     self.zlb = "reflect-even"
@@ -123,10 +123,10 @@ class bcObject:
             sys.exit("ERROR: zlb = %s invalid BC" % (zlb))
 
         # +z boundary
-        if (zrb in valid):
+        if zrb in valid:
             self.zrb = zrb
-            if (self.zrb == "reflect"):
-                if (oddReflectDir == "z"):
+            if self.zrb == "reflect":
+                if oddReflectDir == "z":
                     self.zrb = "reflect-odd"
                 else:
                     self.zrb = "reflect-even"
@@ -227,39 +227,34 @@ class grid3d:
         # zone coordinates
         self.dx = (xmax - xmin)/nx
 
-        self.xl = (numpy.arange(nx+2*ng) - ng)*self.dx + xmin
-        self.xr = (numpy.arange(nx+2*ng) + 1.0 - ng)*self.dx + xmin
+        self.xl = (np.arange(nx+2*ng) - ng)*self.dx + xmin
+        self.xr = (np.arange(nx+2*ng) + 1.0 - ng)*self.dx + xmin
         self.x = 0.5*(self.xl + self.xr)
 
         self.dy = (ymax - ymin)/ny
 
-        self.yl = (numpy.arange(ny+2*ng) - ng)*self.dy + ymin
-        self.yr = (numpy.arange(ny+2*ng) + 1.0 - ng)*self.dy + ymin
+        self.yl = (np.arange(ny+2*ng) - ng)*self.dy + ymin
+        self.yr = (np.arange(ny+2*ng) + 1.0 - ng)*self.dy + ymin
         self.y = 0.5*(self.yl + self.yr)
 
         self.dz = (zmax - zmin)/nz
 
-        self.zl = (numpy.arange(nz+2*ng) - ng)*self.dz + zmin
-        self.zr = (numpy.arange(nz+2*ng) + 1.0 - ng)*self.dz + zmin
+        self.zl = (np.arange(nz+2*ng) - ng)*self.dz + zmin
+        self.zr = (np.arange(nz+2*ng) + 1.0 - ng)*self.dz + zmin
         self.z = 0.5*(self.zl + self.zr)
 
         # 3-d versions of the zone coordinates 
         self.x3d, self.y3d, self.z3d = \
-            numpy.meshgrid(self.x, self.y, self.z, indexing="ij")
+            np.meshgrid(self.x, self.y, self.z, indexing="ij")
 
 
-    def scratchArray(self, dtype=numpy.float64):
+    def scratchArray(self, dtype=np.float64):
         """ 
         return a standard numpy array dimensioned to have the size
         and number of ghostcells as the parent grid
         """
 
-        array = numpy.zeros((2*self.ng+self.nx, 
-                             2*self.ng+self.ny,
-                             2*self.ng+self.nz),
-                            dtype=dtype)
-
-        return array
+        return np.zeros((self.qx, self.qy, self.qz), dtype=dtype)
 
 
     def __str__(self):
@@ -325,7 +320,7 @@ class ccData3d:
     
     """
 
-    def __init__ (self, grid, dtype=numpy.float64):
+    def __init__ (self, grid, dtype=np.float64):
 
         """
         The class constructor function.
@@ -356,7 +351,7 @@ class ccData3d:
         variable.
         """
 
-        if (self.initialized == 1):
+        if self.initialized == 1:
             sys.exit("ERROR: grid already initialized")
 
         self.vars.append(name)
@@ -378,21 +373,19 @@ class ccData3d:
         the storage for the state data
         """
 
-        if (self.initialized) == 1:
+        if self.initialized == 1:
             sys.exit("ERROR: grid already initialized")
 
-        self.data = numpy.zeros((self.nvar,
-                                 2*self.grid.ng+self.grid.nx, 
-                                 2*self.grid.ng+self.grid.ny,
-                                 2*self.grid.ng+self.grid.nz),
-                                dtype=self.dtype)
+        g = self.grid
+
+        self.data = np.zeros((self.nvar, g.qx, g.qy, g.qz), dtype=self.dtype)
         self.initialized = 1
 
         
     def __str__(self):
         """ print out some basic information about the ccData2d object """
 
-        if (self.initialized == 0):
+        if self.initialized == 0:
             myStr = "ccData2d object not yet initialized"
             return myStr
 
@@ -411,11 +404,11 @@ class ccData3d:
         khi = self.grid.khi
 
         n = 0
-        while (n < self.nvar):
+        while n < self.nvar:
             myStr += "%16s: min: %15.10f    max: %15.10f\n" % \
                 (self.vars[n],
-                 numpy.min(self.data[n,ilo:ihi+1,jlo:jhi+1,klo:khi+1]), 
-                 numpy.max(self.data[n,ilo:ihi+1,jlo:jhi+1,klo:khi+1]) )
+                 np.min(self.data[n,ilo:ihi+1,jlo:jhi+1,klo:khi+1]), 
+                 np.max(self.data[n,ilo:ihi+1,jlo:jhi+1,klo:khi+1]) )
             myStr += "%16s  BCs: -x: %-12s +x: %-12s -y: %-12s +y: %-12s -z: %-12s +z: %-12s\n" %\
                 (" " , self.BCs[self.vars[n]].xlb, 
                        self.BCs[self.vars[n]].xrb, 
@@ -485,15 +478,14 @@ class ccData3d:
         n = self.vars.index(name)
 
         # -x boundary
-        if (self.BCs[name].xlb == "outflow" or 
-            self.BCs[name].xlb == "neumann"):
+        if self.BCs[name].xlb == "outflow" or self.BCs[name].xlb == "neumann":
 
             i = 0
             while i < self.grid.ilo:
                 self.data[n,i,:,:] = self.data[n,self.grid.ilo,:,:]
                 i += 1                
 
-        elif (self.BCs[name].xlb == "reflect-even"):
+        elif self.BCs[name].xlb == "reflect-even":
         
             i = 0
             while i < self.grid.ilo:
@@ -514,7 +506,7 @@ class ccData3d:
             self.data[n,self.grid.ilo-1,:,:] = 0.5*self.data[n,self.grid.ilo+1,:,:] - \
                                                2.5*self.data[n,self.grid.ilo  ,:,:]
 
-        elif (self.BCs[name].xlb == "periodic"):
+        elif self.BCs[name].xlb == "periodic":
 
             i = 0
             while i < self.grid.ilo:
@@ -523,15 +515,14 @@ class ccData3d:
             
 
         # +x boundary
-        if (self.BCs[name].xrb == "outflow" or
-            self.BCs[name].xrb == "neumann"):
+        if self.BCs[name].xrb == "outflow" or self.BCs[name].xrb == "neumann":
 
             i = self.grid.ihi+1
             while i < self.grid.nx+2*self.grid.ng:
                 self.data[n,i,:,:] = self.data[n,self.grid.ihi,:,:]
                 i += 1
                 
-        elif (self.BCs[name].xrb == "reflect-even"):
+        elif self.BCs[name].xrb == "reflect-even":
 
             i = 0
             while i < self.grid.ng:
@@ -558,7 +549,7 @@ class ccData3d:
             self.data[n,self.grid.ihi+1,:,:] = 0.5*self.data[n,self.grid.ihi-1,:,:] - \
                                                2.5*self.data[n,self.grid.ihi  ,:,:]
 
-        elif (self.BCs[name].xrb == "periodic"):
+        elif self.BCs[name].xrb == "periodic":
 
             i = self.grid.ihi+1
             while i < 2*self.grid.ng + self.grid.nx:
@@ -567,15 +558,14 @@ class ccData3d:
 
 
         # -y boundary
-        if (self.BCs[name].ylb == "outflow" or
-            self.BCs[name].ylb == "neumann"):
+        if self.BCs[name].ylb == "outflow" or self.BCs[name].ylb == "neumann":
 
             j = 0
             while j < self.grid.jlo:
                 self.data[n,:,j,:] = self.data[n,:,self.grid.jlo,:]
                 j += 1
                 
-        elif (self.BCs[name].ylb == "reflect-even"):
+        elif self.BCs[name].ylb == "reflect-even":
 
             j = 0
             while j < self.grid.jlo:
@@ -596,7 +586,7 @@ class ccData3d:
             self.data[n,:,self.grid.jlo-1,:] = 0.5*self.data[n,:,self.grid.jlo+1,:] - \
                                                2.5*self.data[n,:,self.grid.jlo  ,:]
 
-        elif (self.BCs[name].ylb == "periodic"):
+        elif self.BCs[name].ylb == "periodic":
 
             j = 0
             while j < self.grid.jlo:
@@ -605,15 +595,14 @@ class ccData3d:
                 
 
         # +y boundary
-        if (self.BCs[name].yrb == "outflow" or
-            self.BCs[name].yrb == "neumann"):
+        if self.BCs[name].yrb == "outflow" or self.BCs[name].yrb == "neumann":
 
             j = self.grid.jhi+1
             while j < self.grid.ny+2*self.grid.ng:
                 self.data[n,:,j,:] = self.data[n,:,self.grid.jhi,:]
                 j += 1
 
-        elif (self.BCs[name].yrb == "reflect-even"):
+        elif self.BCs[name].yrb == "reflect-even":
 
             j = 0
             while j < self.grid.ng:
@@ -640,7 +629,7 @@ class ccData3d:
             self.data[n,:,self.grid.jhi+1,:] = 0.5*self.data[n,:,self.grid.jhi-1,:] - \
                                                2.5*self.data[n,:,self.grid.jhi  ,:]
         
-        elif (self.BCs[name].yrb == "periodic"):
+        elif self.BCs[name].yrb == "periodic":
 
             j = self.grid.jhi+1
             while j < 2*self.grid.ng + self.grid.ny:
@@ -649,15 +638,14 @@ class ccData3d:
 
 
         # -z boundary
-        if (self.BCs[name].zlb == "outflow" or
-            self.BCs[name].zlb == "neumann"):
+        if self.BCs[name].zlb == "outflow" or self.BCs[name].zlb == "neumann":
 
             k = 0
             while k < self.grid.klo:
                 self.data[n,:,:,k] = self.data[n,:,:,self.grid.klo]
                 k += 1
                 
-        elif (self.BCs[name].zlb == "reflect-even"):
+        elif self.BCs[name].zlb == "reflect-even":
 
             k = 0
             while k < self.grid.klo:
@@ -678,7 +666,7 @@ class ccData3d:
             self.data[n,:,:,self.grid.klo-1] = 0.5*self.data[n,:,:,self.grid.klo+1] - \
                                                2.5*self.data[n,:,:,self.grid.klo  ]
 
-        elif (self.BCs[name].zlb == "periodic"):
+        elif self.BCs[name].zlb == "periodic":
 
             k = 0
             while k < self.grid.klo:
@@ -687,15 +675,14 @@ class ccData3d:
                 
 
         # +z boundary
-        if (self.BCs[name].zrb == "outflow" or
-            self.BCs[name].zrb == "neumann"):
+        if self.BCs[name].zrb == "outflow" or self.BCs[name].zrb == "neumann":
 
             k = self.grid.khi+1
             while k < self.grid.nz+2*self.grid.ng:
                 self.data[n,:,:,k] = self.data[n,:,:,self.grid.khi]
                 k += 1
 
-        elif (self.BCs[name].zrb == "reflect-even"):
+        elif self.BCs[name].zrb == "reflect-even":
 
             k = 0
             while k < self.grid.ng:
@@ -722,7 +709,7 @@ class ccData3d:
             self.data[n,:,:,self.grid.khi+1] = 0.5*self.data[n,:,:,self.grid.khi-1] - \
                                                2.5*self.data[n,:,:,self.grid.khi  ]
 
-        elif (self.BCs[name].zrb == "periodic"):
+        elif self.BCs[name].zrb == "periodic":
 
             k = self.grid.khi+1
             while k < 2*self.grid.ng + self.grid.nz:
@@ -746,7 +733,7 @@ class ccData3d:
         ny_c = fG.ny/2
         nz_c = fG.nz/2
 
-        cData = numpy.zeros((2*ng_c+nx_c, 2*ng_c+ny_c, 2*ng_c+nz_c), 
+        cData = np.zeros((2*ng_c+nx_c, 2*ng_c+ny_c, 2*ng_c+nz_c), 
                             dtype=self.dtype)
 
         ilo_c = ng_c
@@ -823,7 +810,7 @@ class ccData3d:
         ny_f = cG.ny*2
         nz_f = cG.nz*2
 
-        fData = numpy.zeros((2*ng_f+nx_f, 2*ng_f+ny_f, 2*ng_f+nz_f), 
+        fData = np.zeros((2*ng_f+nx_f, 2*ng_f+ny_f, 2*ng_f+nz_f), 
                             dtype=self.dtype)
 
         ilo_f = ng_f
@@ -940,9 +927,9 @@ class ccData3d:
 
         a = self.getVarPtr(varname)
 
-        if (self.dtype == numpy.int):
+        if self.dtype == np.int:
             fmt = "%4d"
-        elif (self.dtype == numpy.float64):
+        elif self.dtype == np.float64:
             fmt = "%10.5g"
         else:
             sys.exit("ERROR: dtype not supported")
@@ -974,7 +961,7 @@ def read(filename):
     """
 
     # if we come in with .pyro, we don't need to add it again
-    if (filename.find(".pyro") < 0):
+    if filename.find(".pyro") < 0:
         filename += ".pyro"
 
     pF = open(filename, "rb")
@@ -987,13 +974,13 @@ def read(filename):
 def ccDataClone(old):
     """ create a new ccData2d object that is a copy of an existing one """
 
-    if (not isinstance(old, ccData2d)):
+    if not isinstance(old, ccData2d):
         sys.exit("Can't clone object")
 
     new = ccData2d(old.grid, dtype=old.dtype)
 
     n = 0
-    while (n < old.nvar):
+    while n < old.nvar:
         new.registerVar(old.vars[n], old.BCs[old.vars[n]])
         n += 1
 
@@ -1021,7 +1008,7 @@ if __name__== "__main__":
 
 
     a = mydata.getVarPtr("a")
-    a[:,:,:] = numpy.exp(-(myg.x3d - 0.5)**2 - (myg.y3d - 1.0)**2 - (myg.z3d - 0.375)**2)
+    a[:,:,:] = np.exp(-(myg.x3d - 0.5)**2 - (myg.y3d - 1.0)**2 - (myg.z3d - 0.375)**2)
 
     print mydata
 
