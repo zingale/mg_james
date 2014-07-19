@@ -55,7 +55,7 @@ class bcObject:
 
         valid = ["outflow", "periodic", 
                  "reflect", "reflect-even", "reflect-odd",
-                 "dirichlet", "neumann"]
+                 "dirichlet", "dirichlet-ho", "neumann"]
 
         # note: "reflect" is ambiguous and will be converted into
         # either reflect-even (the default) or reflect-odd if
@@ -508,6 +508,12 @@ class ccData3d:
                 self.data[n,i,:,:] = -self.data[n,2*self.grid.ng-i-1,:,:]
                 i += 1
 
+        elif self.BCs[name].xlb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,self.grid.ilo-1,:,:] = 0.5*self.data[n,self.grid.ilo+1,:,:] - \
+                                               2.5*self.data[n,self.grid.ilo  ,:,:]
+
         elif (self.BCs[name].xlb == "periodic"):
 
             i = 0
@@ -546,6 +552,12 @@ class ccData3d:
                 self.data[n,i_bnd,:,:] = -self.data[n,i_src,:,:]
                 i += 1
 
+        elif self.BCs[name].xrb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,self.grid.ihi+1,:,:] = 0.5*self.data[n,self.grid.ihi-1,:,:] - \
+                                               2.5*self.data[n,self.grid.ihi  ,:,:]
+
         elif (self.BCs[name].xrb == "periodic"):
 
             i = self.grid.ihi+1
@@ -577,6 +589,12 @@ class ccData3d:
             while j < self.grid.jlo:
                 self.data[n,:,j,:] = -self.data[n,:,2*self.grid.ng-j-1,:]
                 j += 1
+
+        elif self.BCs[name].ylb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,:,self.grid.jlo-1,:] = 0.5*self.data[n,:,self.grid.jlo+1,:] - \
+                                               2.5*self.data[n,:,self.grid.jlo  ,:]
 
         elif (self.BCs[name].ylb == "periodic"):
 
@@ -615,6 +633,12 @@ class ccData3d:
 
                 self.data[n,:,j_bnd,:] = -self.data[n,:,j_src,:]
                 j += 1
+
+        elif self.BCs[name].yrb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,:,self.grid.jhi+1,:] = 0.5*self.data[n,:,self.grid.jhi-1,:] - \
+                                               2.5*self.data[n,:,self.grid.jhi  ,:]
         
         elif (self.BCs[name].yrb == "periodic"):
 
@@ -647,6 +671,12 @@ class ccData3d:
             while k < self.grid.klo:
                 self.data[n,:,:,k] = -self.data[n,:,:,2*self.grid.ng-k-1]
                 k += 1
+
+        elif self.BCs[name].zlb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,:,:,self.grid.klo-1] = 0.5*self.data[n,:,:,self.grid.klo+1] - \
+                                               2.5*self.data[n,:,:,self.grid.klo  ]
 
         elif (self.BCs[name].zlb == "periodic"):
 
@@ -686,6 +716,12 @@ class ccData3d:
                 self.data[n,:,:,k_bnd] = -self.data[n,:,:,k_src]
                 k += 1
         
+        elif self.BCs[name].zrb == "dirichlet-ho":
+            
+            # only a single ghost-cell, done higher order
+            self.data[n,:,:,self.grid.khi+1] = 0.5*self.data[n,:,:,self.grid.khi-1] - \
+                                               2.5*self.data[n,:,:,self.grid.khi  ]
+
         elif (self.BCs[name].zrb == "periodic"):
 
             k = self.grid.khi+1
