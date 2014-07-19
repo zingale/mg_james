@@ -245,9 +245,9 @@ a = multigrid.ccMG3d(nx, ny, nz,
                      xmin=xmin, ymin=ymin, zmin=zmin,
                      xmax=xmax, ymax=ymax, zmax=zmax,
                      xlBCtype="dirichlet-ho", xrBCtype="dirichlet-ho",
-                     ylBCtype="dirichlet-ho", yrBCtype="dirichlet-ho",
-                     zlBCtype="dirichlet-ho", zrBCtype="dirichlet-ho",
-                     smoother="jacobi",
+                     ylBCtype="dirichlet-ho", yrBCtype="dirichlet",
+                     zlBCtype="dirichlet-ho", zrBCtype="dirichlet",
+                     smoother="GS",
                      verbose=0)
 
 # initialize the solution to 0
