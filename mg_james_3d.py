@@ -96,6 +96,14 @@ def f(grid):
 # the L2 error norm
 def error(g, r):
 
+    # L2 norm of elements in r, multiplied by dV to
+    # normalize
+    return np.sqrt(g.dx*g.dy*g.dz*
+                   np.sum((r[g.ilo:g.ihi+1,g.jlo:g.jhi+1,g.klo:g.khi+1]**2).flat))
+
+
+def error_surf(g, r):
+
     # L2 norm of the *faces*
 
     err = 0.0
@@ -478,8 +486,8 @@ t = true(a.solnGrid, a.x3d, a.y3d, a.z3d)
 
 e = phi - t
 
-print " L2 error from true solution = %g\n rel. err from previous cycle = %g\n num. cycles = %d" % \
-      (error(a.solnGrid, e) / error(a.solnGrid,t), a.relativeError, a.numCycles)
+
+print " L2 error from true solution = {}\n".format(error(a.solnGrid, e))
 
 print "Min (phi) = ", np.min(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (phi) = ", np.max(phi[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
 print "Min (true) = ", np.min(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1]), "Max (true) = ", np.max(t[a.ilo:a.ihi+1,a.jlo:a.jhi+1,a.klo:a.khi+1])
