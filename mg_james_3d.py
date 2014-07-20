@@ -185,13 +185,15 @@ def create_r(x,y,z,a):
     r_xl = np.zeros((a.qy, a.qz, 4))
     r_xr = np.zeros((a.qy, a.qz, 4))
 
-    r_xl[:,:,1] = a.xmin - x
+    #r_xl[:,:,1] = a.xmin - x
+    r_xl[:,:,1] = a.x3d[a.ilo,:,:] - x
     r_xl[:,:,2] = a.y3d[a.ilo,:,:] - y
     r_xl[:,:,3] = a.z3d[a.ilo,:,:] - z
 
     r_xl[:,:,0] = np.sqrt(r_xl[:,:,1]**2 + r_xl[:,:,2]**2 + r_xl[:,:,3]**2)
 
-    r_xr[:,:,1] = a.xmax - x
+    #r_xr[:,:,1] = a.xmax - x
+    r_xr[:,:,1] = a.x3d[a.ihi,:,:] - x
     r_xr[:,:,2] = a.y3d[a.ihi,:,:] - y
     r_xr[:,:,3] = a.z3d[a.ihi,:,:] - z
 
@@ -203,13 +205,15 @@ def create_r(x,y,z,a):
     r_yr = np.zeros((a.qx, a.qz, 4))
     
     r_yl[:,:,1] = a.x3d[:,a.jlo,:] - x
-    r_yl[:,:,2] = a.ymin - y
+    #r_yl[:,:,2] = a.ymin - y
+    r_yl[:,:,2] = a.y3d[:,a.jlo,:] - y
     r_yl[:,:,3] = a.z3d[:,a.jlo,:] - z
 
     r_yl[:,:,0] = np.sqrt(r_yl[:,:,1]**2 + r_yl[:,:,2]**2 + r_yl[:,:,3]**2)
 
     r_yr[:,:,1] = a.x3d[:,a.jhi,:] - x
-    r_yr[:,:,2] = a.ymax - y
+    #r_yr[:,:,2] = a.ymax - y
+    r_yr[:,:,2] = a.y3d[:,a.jhi,:] - y
     r_yr[:,:,3] = a.z3d[:,a.jhi,:] - z
 
     r_yr[:,:,0] = np.sqrt(r_yr[:,:,1]**2 + r_yr[:,:,2]**2 + r_yr[:,:,3]**2)
@@ -221,13 +225,15 @@ def create_r(x,y,z,a):
 
     r_zl[:,:,1] = a.x3d[:,:,a.klo] - x
     r_zl[:,:,2] = a.y3d[:,:,a.klo] - y
-    r_zl[:,:,3] = a.zmin - z
+    #r_zl[:,:,3] = a.zmin - z
+    r_zl[:,:,3] = a.z3d[:,:,a.klo] - z
 
     r_zl[:,:,0] = np.sqrt(r_zl[:,:,1]**2 + r_zl[:,:,2]**2 + r_zl[:,:,3]**2)
 
     r_zr[:,:,1] = a.x3d[:,:,a.khi] - x
     r_zr[:,:,2] = a.y3d[:,:,a.khi] - y
-    r_zr[:,:,3] = a.zmax - z
+    #r_zr[:,:,3] = a.zmax - z
+    r_zr[:,:,3] = a.z3d[:,:,a.khi] - z
     
     r_zr[:,:,0] = np.sqrt(r_zr[:,:,1]**2 + r_zr[:,:,2]**2 + r_zr[:,:,3]**2)
 
